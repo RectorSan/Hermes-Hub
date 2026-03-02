@@ -32,10 +32,13 @@ const seed = {
 const $ = (id) => document.getElementById(id);
 const authCard = $("authCard");
 const app = $("app");
-const authForm = $("authForm");
+const loginForm = $("loginForm");
+const signupForm = $("signupForm");
 const logoutBtn = $("logoutBtn");
 const roleSelect = $("roleSelect");
 const providerFields = $("providerFields");
+const showLoginBtn = $("showLoginBtn");
+const showSignupBtn = $("showSignupBtn");
 
 function loadDB() {
   return JSON.parse(localStorage.getItem(DB_KEY) || "null") || structuredClone(seed);
@@ -307,39 +310,30 @@ roleSelect.addEventListener("change", () => {
   providerFields.classList.toggle("hidden", roleSelect.value !== "provider");
 });
 
-authForm.addEventListener("submit", (event) => {
+function switchAuthView(view) {
+  const loginMode = view === "login";
+  loginForm.classList.toggle("hidden", !loginMode);
+  signupForm.classList.toggle("hidden", loginMode);
+  showLoginBtn.classList.toggle("active", loginMode);
+  showSignupBtn.classList.toggle("active", !loginMode);
+}
+
+showLoginBtn.onclick = () => switchAuthView("login");
+showSignupBtn.onclick = () => switchAuthView("signup");
+
+loginForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  const data = new FormData(authForm);
+  const data = new FormData(loginForm);
   const db = loadDB();
   const email = String(data.get("email")).toLowerCase();
+  const user = db.users.find((u) => u.email.toLowerCase() === email);
 
-  let user = db.users.find((u) => u.email.toLowerCase() === email);
   if (!user) {
-    user = {
-      id: uid("usr"),
-      name: data.get("name"),
-      email,
-      phone: data.get("phone"),
-      role: data.get("role"),
-    };
-    if (user.role === "provider") {
-      Object.assign(user, {
-        category: data.get("category"),
-        location: data.get("location"),
-        business: data.get("business"),
-        kycId: data.get("kycId"),
-        kycStatus: "pending",
-        availability: [],
-        earnings: 0,
-        completedJobs: 0,
-        acceptedJobs: 0,
-      });
-    }
-    db.users.push(user);
-    saveDB(db);
+    alert("No account found. Please sign up first.");
+    switchAuthView("signup");
+    return;
   }
 
-  // Simulated OTP gate
   const otp = prompt("Enter OTP sent to email/phone (use 123456)");
   if (otp !== "123456") {
     alert("Invalid OTP");
@@ -347,14 +341,65 @@ authForm.addEventListener("submit", (event) => {
   }
 
   setSession(user.id);
-  authForm.reset();
+  loginForm.reset();
+  render();
+});
+
+signupForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const data = new FormData(signupForm);
+  const db = loadDB();
+  const email = String(data.get("email")).toLowerCase();
+
+  const existingUser = db.users.find((u) => u.email.toLowerCase() === email);
+  if (existingUser) {
+    alert("An account with this email already exists. Please login.");
+    switchAuthView("login");
+    return;
+  }
+
+  const user = {
+    id: uid("usr"),
+    name: data.get("name"),
+    email,
+    phone: data.get("phone"),
+    role: data.get("role"),
+  };
+
+  if (user.role === "provider") {
+    Object.assign(user, {
+      category: data.get("category"),
+      location: data.get("location"),
+      business: data.get("business"),
+      kycId: data.get("kycId"),
+      kycStatus: "pending",
+      availability: [],
+      earnings: 0,
+      completedJobs: 0,
+      acceptedJobs: 0,
+    });
+  }
+
+  db.users.push(user);
+  saveDB(db);
+
+  const otp = prompt("Enter OTP sent to email/phone (use 123456)");
+  if (otp !== "123456") {
+    alert("Invalid OTP");
+    return;
+  }
+
+  setSession(user.id);
+  signupForm.reset();
   providerFields.classList.add("hidden");
   render();
 });
 
 logoutBtn.onclick = () => {
   clearSession();
+  switchAuthView("login");
   render();
 };
 
+switchAuthView("login");
 render();

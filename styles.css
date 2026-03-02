@@ -74,3 +74,16 @@ button.warn { background: #dc2626; }
     align-items: start;
   }
 }
+
+.auth-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 0.9rem;
+}
+
+.auth-toggle button.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #fff;
+}

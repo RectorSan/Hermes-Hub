@@ -17,9 +17,22 @@
 
     <main>
       <section id="authCard" class="card">
-        <h2>Get started</h2>
-        <p>Create an account as a customer, artisan, or admin demo user.</p>
-        <form id="authForm" class="stack">
+        <h2>Welcome</h2>
+        <p>Use different pages for login and sign up.</p>
+        <div class="auth-toggle" role="tablist" aria-label="Authentication pages">
+          <button type="button" id="showLoginBtn" class="ghost active" data-auth-view="login">Login</button>
+          <button type="button" id="showSignupBtn" class="ghost" data-auth-view="signup">Sign up</button>
+        </div>
+
+        <form id="loginForm" class="stack">
+          <label>
+            Email
+            <input required type="email" name="email" placeholder="jane@email.com" />
+          </label>
+          <button type="submit">Login</button>
+        </form>
+
+        <form id="signupForm" class="stack hidden">
           <label>
             Full Name
             <input required name="name" placeholder="Jane Doe" />
@@ -63,7 +76,7 @@
               <input name="kycId" placeholder="NIN/Passport No" />
             </label>
           </div>
-          <button type="submit">Sign up / Login</button>
+          <button type="submit">Create account</button>
         </form>
       </section>
 
