@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hermes Hub</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>Hermes Hub</h1>
+        <p class="tagline">Trusted local services marketplace</p>
+      </div>
+      <button id="logoutBtn" class="ghost hidden">Logout</button>
+    </header>
+
+    <main>
+      <section id="authCard" class="card">
+        <h2>Get started</h2>
+        <p>Create an account as a customer, artisan, or admin demo user.</p>
+        <form id="authForm" class="stack">
+          <label>
+            Full Name
+            <input required name="name" placeholder="Jane Doe" />
+          </label>
+          <label>
+            Email
+            <input required type="email" name="email" placeholder="jane@email.com" />
+          </label>
+          <label>
+            Phone
+            <input required name="phone" placeholder="08012345678" />
+          </label>
+          <label>
+            Role
+            <select name="role" id="roleSelect">
+              <option value="customer">Customer</option>
+              <option value="provider">Service Provider</option>
+              <option value="admin">Admin</option>
+            </select>
+          </label>
+          <div id="providerFields" class="stack hidden">
+            <label>
+              Category
+              <select name="category">
+                <option>Plumber</option>
+                <option>Electrician</option>
+                <option>Makeup Artist</option>
+                <option>Carpenter</option>
+              </select>
+            </label>
+            <label>
+              Location
+              <input name="location" placeholder="Lagos" />
+            </label>
+            <label>
+              Business Name
+              <input name="business" placeholder="Hermes Fix Pro" />
+            </label>
+            <label>
+              KYC ID Number
+              <input name="kycId" placeholder="NIN/Passport No" />
+            </label>
+          </div>
+          <button type="submit">Sign up / Login</button>
+        </form>
+      </section>
+
+      <section id="app" class="hidden">
+        <div class="grid">
+          <section id="customerView" class="card hidden"></section>
+          <section id="providerView" class="card hidden"></section>
+          <section id="adminView" class="card hidden"></section>
+        </div>
+      </section>
+    </main>
+
+    <template id="ratingStarsTemplate">
+      <span class="stars"></span>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
