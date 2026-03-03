@@ -5,6 +5,44 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; }
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.logo {
+  position: relative;
+  width: 46px;
+  height: 58px;
+  border-radius: 8px;
+  background: #2f6fe2;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.logo-pillar {
+  position: absolute;
+  top: 8px;
+  width: 13px;
+  height: 42px;
+  background: #f3f4f6;
+  border-radius: 9px;
+}
+
+.logo-pillar.left { left: 8px; }
+.logo-pillar.right { right: 8px; }
+
+.logo-bolt {
+  position: absolute;
+  left: 16px;
+  top: 20px;
+  width: 16px;
+  height: 22px;
+  background: #fff;
+  clip-path: polygon(38% 0, 100% 0, 63% 44%, 100% 44%, 0 100%, 32% 56%, 0 56%);
+}
 .topbar {
   position: sticky;
   top: 0;
