@@ -125,3 +125,13 @@ button.warn { background: #dc2626; }
   border-color: #2563eb;
   color: #fff;
 }
+
+.muted {
+  color: #475569;
+  margin-top: -0.3rem;
+}
+
+.actions-row {
+  display: flex;
+  gap: 0.7rem;
+}
