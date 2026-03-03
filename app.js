@@ -71,6 +71,72 @@ function renderCustomer(db, user) {
   const options = [...new Set(providers.map((p) => p.category))]
     .map((c) => `<option>${c}</option>`)
     .join("");
+
+  const drawBookingPage = (providerId) => {
+    const provider = providers.find((p) => p.id === providerId);
+    if (!provider) {
+      alert("Provider is no longer available.");
+      render();
+      return;
+    }
+
+    target.innerHTML = `
+      <h2>Order Service</h2>
+      <p class="muted">Set your appointment date/time and tell the seller what you need.</p>
+      <article class="item">
+        <strong>${provider.name}</strong> — ${provider.category}
+        <div class="badges">
+          <span class="badge">${provider.location}</span>
+          <span class="badge">Availability ${provider.availability?.join(", ") || "Not set"}</span>
+        </div>
+      </article>
+      <form id="orderForm" class="stack">
+        <label>
+          Date
+          <input required id="bookingDate" type="date" min="${new Date().toISOString().split("T")[0]}" />
+        </label>
+        <label>
+          Time
+          <input required id="bookingTime" type="time" />
+        </label>
+        <label>
+          Message / Order description (optional)
+          <textarea id="bookingMessage" rows="4" placeholder="Describe what you want the seller to do..."></textarea>
+        </label>
+        <div class="actions-row">
+          <button type="button" id="backToSearch" class="ghost">Back</button>
+          <button type="submit">Confirm booking</button>
+        </div>
+      </form>
+    `;
+
+    $("backToSearch").onclick = () => render();
+    $("orderForm").onsubmit = (event) => {
+      event.preventDefault();
+      const date = $("bookingDate").value;
+      const time = $("bookingTime").value;
+      const message = $("bookingMessage").value.trim();
+
+      if (!date || !time) {
+        alert("Please choose both date and time.");
+        return;
+      }
+
+      db.bookings.push({
+        id: uid("book"),
+        customerId: user.id,
+        providerId,
+        date,
+        time,
+        message,
+        status: "Pending",
+      });
+      db.transactions.push({ id: uid("txn"), bookingId: db.bookings.at(-1).id, amount: 5000, status: "Held" });
+      saveDB(db);
+      render();
+    };
+  };
+
   target.innerHTML = `
     <h2>Customer Portal</h2>
     <div class="stack">
@@ -110,20 +176,7 @@ function renderCustomer(db, user) {
     target.querySelectorAll("[data-book]").forEach((btn) => {
       btn.onclick = () => {
         const providerId = btn.getAttribute("data-book");
-        const date = prompt("Enter date (YYYY-MM-DD)");
-        const time = prompt("Enter time (HH:MM)");
-        if (!date || !time) return;
-        db.bookings.push({
-          id: uid("book"),
-          customerId: user.id,
-          providerId,
-          date,
-          time,
-          status: "Pending",
-        });
-        db.transactions.push({ id: uid("txn"), bookingId: db.bookings.at(-1).id, amount: 5000, status: "Held" });
-        saveDB(db);
-        render();
+        drawBookingPage(providerId);
       };
     });
   };
@@ -139,6 +192,7 @@ function renderCustomer(db, user) {
               <article class="item">
                 <strong>${provider?.name || "Unknown"}</strong>
                 <p>${b.date} ${b.time} — <b>${b.status}</b></p>
+                ${b.message ? `<p><b>Message:</b> ${b.message}</p>` : ""}
                 ${canReview ? `<button data-review="${b.id}">Leave review</button>` : ""}
               </article>`;
           })
@@ -189,6 +243,7 @@ function renderProvider(db, user) {
           (b) => `<article class="item">
             <p><b>${b.date} ${b.time}</b> — ${b.status}</p>
             <div class="badges"><span class="badge">Customer ${b.customerId}</span></div>
+            ${b.message ? `<p><b>Customer message:</b> ${b.message}</p>` : ""}
             <div class="stack">
               <button data-status="Accepted" data-booking="${b.id}">Accept</button>
               <button data-status="In Progress" data-booking="${b.id}">Start job</button>
