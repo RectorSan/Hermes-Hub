@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Hermes Hub</title>
+    <title>HermesHub</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -15,11 +15,22 @@
           <span class="logo-bolt"></span>
         </div>
         <div>
-          <h1>Hermes Hub</h1>
+          <h1>HermesHub</h1>
           <p class="tagline">Trusted local services marketplace</p>
         </div>
       </div>
-      <button id="logoutBtn" class="ghost hidden">Logout</button>
+
+      <div id="marketControls" class="market-controls hidden">
+        <input id="globalSearch" type="search" placeholder="Search for stores, services, and products" />
+        <select id="globalCategory"></select>
+      </div>
+
+      <div class="top-actions">
+        <button id="cartBtn" class="icon-btn hidden" aria-label="Cart">🛒 <span id="cartCount">0</span></button>
+        <button id="profileBtn" class="icon-btn hidden" aria-label="Profile">👤</button>
+        <button id="notifyBtn" class="icon-btn hidden" aria-label="Notifications">🔔</button>
+        <button id="logoutBtn" class="ghost hidden">Logout</button>
+      </div>
     </header>
 
     <main>
