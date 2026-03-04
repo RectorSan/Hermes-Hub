@@ -15,7 +15,7 @@ body { margin: 0; }
 
 .logo {
   position: relative;
-  width: 60px;
+  width: 62px;
   height: 76px;
   border-radius: 0;
   background: #2f6fe2;
@@ -25,15 +25,15 @@ body { margin: 0; }
 
 .logo-pillar {
   position: absolute;
-  top: 11px;
-  width: 14px;
-  height: 54px;
+  top: 9px;
+  width: 18px;
+  height: 58px;
   background: #f3f4f6;
-  border-radius: 0 0 14px 14px;
+  transform: skewX(-16deg);
 }
 
-.logo-pillar.left { left: 5px; }
-.logo-pillar.right { right: 5px; }
+.logo-pillar.left { left: 8px; }
+.logo-pillar.right { right: 8px; }
 
 .logo-bolt {
   position: absolute;
@@ -210,32 +210,6 @@ button.warn { background: #dc2626; }
 .right-sidebar { position: sticky; top: 100px; }
 .right-sidebar ul { margin: 0 0 1rem; padding-left: 1.2rem; }
 
-.cart-page {
-  display: grid;
-  grid-template-columns: 1fr 320px;
-  gap: 1rem;
-}
-.cart-item {
-  display: grid;
-  grid-template-columns: 110px 1fr 80px auto;
-  align-items: center;
-  gap: 0.8rem;
-}
-.cart-thumb {
-  width: 100%;
-  height: 80px;
-  object-fit: cover;
-  border-radius: 10px;
-}
-.order-summary p {
-  display: flex;
-  justify-content: space-between;
-}
-.grand-total {
-  font-size: 1.1rem;
-  border-top: 1px solid #dbeafe;
-  padding-top: 0.6rem;
-}
 .actions-row {
   display: flex;
   gap: 0.7rem;

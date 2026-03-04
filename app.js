@@ -84,12 +84,8 @@ function renderCustomer(db, user) {
     saveDB(db);
   }
 
-  if (!db.carts) db.carts = {};
-  if (!db.carts[user.id]) db.carts[user.id] = [];
-
   const categorySelect = $("globalCategory");
   const searchInput = $("globalSearch");
-  const cartCount = $("cartCount");
 
   categorySelect.innerHTML = ['<option value="">All Categories</option>', ...displayCategories.map((category) => `<option>${category}</option>`)].join("");
   categorySelect.value = "";
@@ -103,11 +99,6 @@ function renderCustomer(db, user) {
   let ratingFilter = "";
   let locationFilter = "";
   let availabilityFilter = "";
-
-  const getCartItems = () => db.carts[user.id] || [];
-  const updateCartCount = () => {
-    cartCount.textContent = getCartItems().reduce((sum, item) => sum + item.quantity, 0);
-  };
 
   const productData = db.catalog.map((product) => {
     const provider = providers.find((p) => p.id === product.providerId);
@@ -192,80 +183,6 @@ function renderCustomer(db, user) {
     };
   };
 
-  const drawCartPage = () => {
-    const cartItems = getCartItems();
-    const deliveryFee = cartItems.length ? 1500 : 0;
-    const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const total = subtotal + deliveryFee;
-
-    target.innerHTML = `
-      <section class="cart-page">
-        <div>
-          <h2>Your Cart</h2>
-          <div class="list">
-            ${cartItems.length
-              ? cartItems
-                  .map(
-                    (item) => `
-                <article class="item cart-item">
-                  <img src="${item.image}" alt="${item.name}" class="cart-thumb" />
-                  <div>
-                    <strong>${item.name}</strong>
-                    <p class="muted">${item.storeName}</p>
-                    <p class="price">₦${item.price.toLocaleString()}</p>
-                  </div>
-                  <label>
-                    Qty
-                    <input type="number" min="1" value="${item.quantity}" data-qty="${item.id}" />
-                  </label>
-                  <button class="warn" data-remove="${item.id}">Remove</button>
-                </article>`
-                  )
-                  .join("")
-              : '<p class="item">Your cart is empty.</p>'}
-          </div>
-        </div>
-        <aside class="card order-summary">
-          <h3>Order Summary</h3>
-          <p><span>Subtotal</span><strong>₦${subtotal.toLocaleString()}</strong></p>
-          <p><span>Delivery fee</span><strong>₦${deliveryFee.toLocaleString()}</strong></p>
-          <p class="grand-total"><span>Total</span><strong>₦${total.toLocaleString()}</strong></p>
-          <button id="checkoutBtn" ${!cartItems.length ? "disabled" : ""}>Proceed to Checkout</button>
-          <button id="continueShopping" class="ghost">Continue Shopping</button>
-        </aside>
-      </section>
-    `;
-
-    target.querySelectorAll("[data-remove]").forEach((btn) => {
-      btn.onclick = () => {
-        db.carts[user.id] = getCartItems().filter((item) => item.id !== btn.getAttribute("data-remove"));
-        saveDB(db);
-        updateCartCount();
-        drawCartPage();
-      };
-    });
-
-    target.querySelectorAll("[data-qty]").forEach((input) => {
-      input.onchange = () => {
-        const id = input.getAttribute("data-qty");
-        const nextQty = Math.max(1, Number(input.value) || 1);
-        db.carts[user.id] = getCartItems().map((item) => (item.id === id ? { ...item, quantity: nextQty } : item));
-        saveDB(db);
-        updateCartCount();
-        drawCartPage();
-      };
-    });
-
-    $("continueShopping").onclick = () => {
-      viewMode = "marketplace";
-      drawMarketplace();
-    };
-
-    $("checkoutBtn").onclick = () => {
-      alert("Checkout flow demo: proceed to payment gateway.");
-    };
-  };
-
   const drawMarketplace = () => {
     const query = searchInput.value.trim().toLowerCase();
     const selectedCategory = categorySelect.value;
@@ -282,6 +199,10 @@ function renderCustomer(db, user) {
 
     const recommendedProducts = filteredProducts.slice(0, 12);
     const myBookings = db.bookings.filter((b) => b.customerId === user.id).slice(-4).reverse();
+    const pendingJobs = db.bookings
+      .filter((b) => b.customerId === user.id && ["Pending", "Accepted", "In Progress"].includes(b.status))
+      .slice(-4)
+      .reverse();
 
     target.innerHTML = `
       <section class="marketplace-layout">
@@ -321,7 +242,7 @@ function renderCustomer(db, user) {
                     <p class="muted">${product.provider?.name || "Marketplace Store"}</p>
                     <p class="price">₦${product.price.toLocaleString()}</p>
                     <p><span class="stars">${stars(product.rating)}</span> (${product.reviewCount})</p>
-                    <button data-add="${product.id}">Add to cart</button>
+                    <button data-quick="${product.providerId}">Book now</button>
                   </article>`)
                 .join("") || '<p class="item">No products found for selected filters.</p>'}
             </div>
@@ -353,6 +274,17 @@ function renderCustomer(db, user) {
           </ul>
           <h3>Flash Deals</h3>
           <p class="badge">Up to 30% off selected services</p>
+          <h3>Pending Jobs</h3>
+          <div class="list">
+            ${pendingJobs.length
+              ? pendingJobs
+                  .map((booking) => {
+                    const provider = db.users.find((u) => u.id === booking.providerId);
+                    return `<article class="item"><strong>${provider?.name || "Service Provider"}</strong><p>${booking.date} ${booking.time} · ${booking.status}</p></article>`;
+                  })
+                  .join("")
+              : '<p class="item">No pending jobs right now.</p>'}
+          </div>
         </aside>
       </section>
     `;
@@ -379,28 +311,6 @@ function renderCustomer(db, user) {
       drawMarketplace();
     };
 
-    target.querySelectorAll("[data-add]").forEach((btn) => {
-      btn.onclick = () => {
-        const product = productData.find((item) => item.id === btn.getAttribute("data-add"));
-        if (!product) return;
-        const existing = getCartItems().find((item) => item.id === product.id);
-        if (existing) {
-          existing.quantity += 1;
-        } else {
-          getCartItems().push({
-            id: product.id,
-            name: product.name,
-            image: product.image,
-            price: product.price,
-            quantity: 1,
-            storeName: product.provider?.name || "Marketplace Store",
-          });
-        }
-        saveDB(db);
-        updateCartCount();
-      };
-    });
-
     target.querySelectorAll("[data-quick]").forEach((btn) => {
       btn.onclick = () => {
         selectedProviderId = btn.getAttribute("data-quick");
@@ -412,14 +322,9 @@ function renderCustomer(db, user) {
 
   const renderView = () => {
     if (viewMode === "marketplace") drawMarketplace();
-    if (viewMode === "cart") drawCartPage();
     if (viewMode === "order") drawBookingPage();
   };
 
-  $("cartBtn").onclick = () => {
-    viewMode = "cart";
-    renderView();
-  };
   $("profileBtn").onclick = () => alert(`Logged in as ${user.name}`);
   $("notifyBtn").onclick = () => alert("You are all caught up.");
 
@@ -431,7 +336,6 @@ function renderCustomer(db, user) {
     if (viewMode === "marketplace") drawMarketplace();
   };
 
-  updateCartCount();
   renderView();
 }
 
@@ -561,7 +465,6 @@ function render() {
     app.classList.add("hidden");
     logoutBtn.classList.add("hidden");
     $("marketControls").classList.add("hidden");
-    $("cartBtn").classList.add("hidden");
     $("profileBtn").classList.add("hidden");
     $("notifyBtn").classList.add("hidden");
     return;
@@ -578,13 +481,11 @@ function render() {
   logoutBtn.classList.remove("hidden");
 
   const marketControls = $("marketControls");
-  const cartBtn = $("cartBtn");
   const profileBtn = $("profileBtn");
   const notifyBtn = $("notifyBtn");
 
   const isCustomer = user.role === "customer";
   marketControls.classList.toggle("hidden", !isCustomer);
-  cartBtn.classList.toggle("hidden", !isCustomer);
   profileBtn.classList.toggle("hidden", !isCustomer);
   notifyBtn.classList.toggle("hidden", !isCustomer);
 
