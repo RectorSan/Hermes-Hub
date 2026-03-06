@@ -11,15 +11,30 @@ const seed = {
       email: "kunle@fix.com",
       phone: "08022222222",
       role: "provider",
-      category: "Electrician",
+      category: "Carpenter",
       location: "Lagos",
-      business: "Sparks NG",
+      business: "Kunle Craftworks",
+      bio: "I handle custom furniture, repairs and complete carpentry projects.",
       kycId: "KYC-1044",
       kycStatus: "approved",
-      availability: ["Mon 10:00", "Tue 14:00", "Wed 16:00"],
+      unavailableDays: ["Sunday"],
       earnings: 25000,
       completedJobs: 4,
       acceptedJobs: 5,
+    },
+  ],
+  catalog: [
+    {
+      id: "svc-1",
+      providerId: "pro-1",
+      itemName: "General Carpentry Works",
+      itemDescription: "Wardrobes, shelving, doors, and custom fitting jobs.",
+      tiers: [
+        { name: "Quick Fix", minPrice: 80000, maxPrice: 150000, description: "Minor repairs and small installations" },
+        { name: "Standard", minPrice: 180000, maxPrice: 350000, description: "Most renovation and custom carpentry tasks" },
+      ],
+      acceptsNegotiation: true,
+      optimalPrice: 350000,
     },
   ],
   bookings: [],
@@ -41,7 +56,10 @@ const showLoginBtn = $("showLoginBtn");
 const showSignupBtn = $("showSignupBtn");
 
 function loadDB() {
-  return JSON.parse(localStorage.getItem(DB_KEY) || "null") || structuredClone(seed);
+  const db = JSON.parse(localStorage.getItem(DB_KEY) || "null") || structuredClone(seed);
+  if (!db.catalog) db.catalog = [];
+  if (!db.bookings) db.bookings = [];
+  return db;
 }
 function saveDB(db) { localStorage.setItem(DB_KEY, JSON.stringify(db)); }
 function getSession() { return JSON.parse(localStorage.getItem(SESSION_KEY) || "null"); }
@@ -55,115 +73,185 @@ function providerRating(db, providerId) {
   return providerReviews.reduce((sum, r) => sum + r.rating, 0) / providerReviews.length;
 }
 
-function completionRate(provider) {
-  if (!provider.acceptedJobs) return 0;
-  return Math.round((provider.completedJobs / provider.acceptedJobs) * 100);
-}
-
 function stars(value) {
   return "★".repeat(Math.round(value)) + "☆".repeat(5 - Math.round(value));
+}
+
+function activeJobsCount(db, providerId) {
+  return db.bookings.filter((b) => b.providerId === providerId && ["Pending", "Accepted", "In Progress", "Countered"].includes(b.status)).length;
+}
+
+function getDayName(dateText) {
+  const date = new Date(`${dateText}T00:00:00`);
+  return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][date.getDay()];
+}
+
+function ensureDateTimePickerExperience(dateInput, timeInput) {
+  [dateInput, timeInput].forEach((input) => {
+    if (!input) return;
+    const openPicker = () => {
+      if (typeof input.showPicker === "function") input.showPicker();
+    };
+    input.closest(".clickable-picker")?.addEventListener("click", openPicker);
+    input.addEventListener("focus", openPicker);
+  });
 }
 
 function renderCustomer(db, user) {
   const target = $("customerView");
   target.classList.remove("hidden");
   const providers = db.users.filter((u) => u.role === "provider" && u.kycStatus === "approved");
-  const categories = [...new Set(providers.map((p) => p.category))];
-  const fallbackCategories = ["Electronics", "Home Services", "Beauty", "Fashion", "Automotive", "Groceries"];
-  const displayCategories = (categories.length ? categories : fallbackCategories).slice(0, 6);
-
-  if (!db.catalog || !db.catalog.length) {
-    db.catalog = providers.map((provider, index) => ({
-      id: `prod-${provider.id}`,
-      providerId: provider.id,
-      name: `${provider.category} Pro Service`,
-      category: provider.category,
-      price: 5000 + index * 1500,
-      image: `https://picsum.photos/seed/${provider.id}/400/300`,
-    }));
-    saveDB(db);
-  }
-
-  const categorySelect = $("globalCategory");
-  const searchInput = $("globalSearch");
-
-  categorySelect.innerHTML = ['<option value="">All Categories</option>', ...displayCategories.map((category) => `<option>${category}</option>`)].join("");
-  categorySelect.value = "";
-  searchInput.value = "";
 
   let viewMode = "marketplace";
   let selectedProviderId = null;
+  let selectedServiceId = null;
 
-  const ratingOptions = [5, 4, 3];
-  let priceLimit = 20000;
-  let ratingFilter = "";
-  let locationFilter = "";
-  let availabilityFilter = "";
+  const searchInput = $("globalSearch");
+  const categorySelect = $("globalCategory");
+  const categories = [...new Set(providers.map((p) => p.category).filter(Boolean))];
+  categorySelect.innerHTML = ['<option value="">All Categories</option>', ...categories.map((category) => `<option>${category}</option>`)].join("");
 
-  const productData = db.catalog.map((product) => {
-    const provider = providers.find((p) => p.id === product.providerId);
-    return {
-      ...product,
-      provider,
-      rating: provider ? providerRating(db, provider.id) : 0,
-      reviewCount: provider ? db.reviews.filter((r) => r.providerId === provider.id).length : 0,
-      location: provider?.location || "Lagos",
-      inStock: true,
-    };
-  });
+  const drawMarketplace = () => {
+    const q = searchInput.value.trim().toLowerCase();
+    const chosenCategory = categorySelect.value;
+    const serviceCards = db.catalog
+      .map((service) => {
+        const provider = providers.find((p) => p.id === service.providerId);
+        return provider ? { service, provider } : null;
+      })
+      .filter(Boolean)
+      .filter(({ service, provider }) => {
+        const matchesText = !q || service.itemName.toLowerCase().includes(q) || provider.name.toLowerCase().includes(q) || (service.itemDescription || "").toLowerCase().includes(q);
+        const matchesCategory = !chosenCategory || provider.category === chosenCategory;
+        return matchesText && matchesCategory;
+      });
+
+    target.innerHTML = `
+      <h2>Find Sellers & Services</h2>
+      <div class="products-grid">
+        ${serviceCards.map(({ service, provider }) => {
+          const reviewCount = db.reviews.filter((r) => r.providerId === provider.id).length;
+          const minTier = service.tiers.reduce((min, tier) => Math.min(min, Number(tier.minPrice) || Infinity), Infinity);
+          return `
+            <article class="product-card">
+              <h4>${service.itemName}</h4>
+              <p class="muted">${provider.name} · ${provider.location || "Unknown"}</p>
+              <p>${service.itemDescription || "No description yet."}</p>
+              <p class="price">From ₦${Number.isFinite(minTier) ? minTier.toLocaleString() : "0"}</p>
+              <p><span class="stars">${stars(providerRating(db, provider.id))}</span> (${reviewCount})</p>
+              <button data-provider="${provider.id}" data-service="${service.id}">View seller profile</button>
+            </article>`;
+        }).join("") || '<p class="item">No sellers found for your search.</p>'}
+      </div>
+
+      <h3>My recent orders</h3>
+      <div class="list">
+        ${db.bookings.filter((b) => b.customerId === user.id).slice(-5).reverse().map((booking) => {
+          const provider = db.users.find((u) => u.id === booking.providerId);
+          return `<article class="item"><b>${provider?.name || "Seller"}</b><p>${booking.date} ${booking.time} · ${booking.status} · ₦${(booking.offerPrice || 0).toLocaleString()}</p></article>`;
+        }).join("") || '<p class="item">No orders yet.</p>'}
+      </div>
+    `;
+
+    target.querySelectorAll("[data-provider]").forEach((btn) => {
+      btn.onclick = () => {
+        selectedProviderId = btn.getAttribute("data-provider");
+        selectedServiceId = btn.getAttribute("data-service");
+        viewMode = "profile";
+        renderView();
+      };
+    });
+  };
+
+  const drawSellerProfile = () => {
+    const provider = providers.find((p) => p.id === selectedProviderId);
+    const service = db.catalog.find((c) => c.id === selectedServiceId);
+    if (!provider || !service) {
+      viewMode = "marketplace";
+      drawMarketplace();
+      return;
+    }
+
+    const providerReviews = db.reviews.filter((r) => r.providerId === provider.id);
+    const busyCount = activeJobsCount(db, provider.id);
+
+    target.innerHTML = `
+      <button id="backToMarket" class="ghost">← Back to marketplace</button>
+      <h2>${provider.name}</h2>
+      <p class="muted">${provider.business || "Independent Seller"} · ${provider.category || "General"} · ${provider.location || "Unknown"}</p>
+      <p>${provider.bio || "No seller bio yet."}</p>
+      <div class="badges">
+        <span class="badge">Rating ${providerRating(db, provider.id).toFixed(1)} (${providerReviews.length} reviews)</span>
+        <span class="badge">Currently handling ${busyCount} active jobs</span>
+        <span class="badge">Unavailable days: ${(provider.unavailableDays || []).join(", ") || "None"}</span>
+      </div>
+
+      <h3>${service.itemName}</h3>
+      <p>${service.itemDescription || "No description."}</p>
+      <div class="list">
+        ${service.tiers.map((tier) => `<article class="item"><b>${tier.name}</b><p>${tier.description || "No details"}</p><p>₦${Number(tier.minPrice).toLocaleString()} - ₦${Number(tier.maxPrice).toLocaleString()}</p></article>`).join("")}
+      </div>
+      <button id="bookSeller">Place order / negotiate</button>
+
+      <h3>Reviews</h3>
+      <div class="list">
+        ${providerReviews.map((r) => `<article class="item"><span class="stars">${stars(r.rating)}</span> ${r.comment || ""}</article>`).join("") || '<p class="item">No reviews yet.</p>'}
+      </div>
+    `;
+
+    $("backToMarket").onclick = () => { viewMode = "marketplace"; renderView(); };
+    $("bookSeller").onclick = () => { viewMode = "order"; renderView(); };
+  };
 
   const drawBookingPage = () => {
     const provider = providers.find((p) => p.id === selectedProviderId);
-    if (!provider) {
-      alert("Provider is no longer available.");
+    const service = db.catalog.find((c) => c.id === selectedServiceId);
+    if (!provider || !service) {
       viewMode = "marketplace";
       drawMarketplace();
       return;
     }
 
     target.innerHTML = `
-      <h2>Order Service</h2>
-      <p class="muted">Set your appointment date/time and tell the seller what you need.</p>
-      <article class="item">
-        <strong>${provider.name}</strong> — ${provider.category}
-        <div class="badges">
-          <span class="badge">${provider.location}</span>
-          <span class="badge">Availability ${provider.availability?.join(", ") || "Not set"}</span>
-        </div>
-      </article>
+      <button id="backToSeller" class="ghost">← Back to seller profile</button>
+      <h2>Order from ${provider.name}</h2>
+      <p class="muted">Select date/time and propose a price in seller range.</p>
       <form id="orderForm" class="stack">
-        <label>
-          Date
-          <input required id="bookingDate" type="date" min="${new Date().toISOString().split("T")[0]}" />
+        <label>Service package
+          <select id="tierSelect">${service.tiers.map((tier, index) => `<option value="${index}">${tier.name} (₦${Number(tier.minPrice).toLocaleString()} - ₦${Number(tier.maxPrice).toLocaleString()})</option>`).join("")}</select>
         </label>
-        <label>
-          Time
-          <input required id="bookingTime" type="time" />
+        <label>Suggested budget (₦)
+          <input id="offerPrice" type="number" min="1" required placeholder="e.g. 350000" />
         </label>
-        <label>
-          Message / Order description (optional)
-          <textarea id="bookingMessage" rows="4" placeholder="Describe what you want the seller to do..."></textarea>
-        </label>
-        <div class="actions-row">
-          <button type="button" id="backToSearch" class="ghost">Back</button>
-          <button type="submit">Confirm booking</button>
+        <div class="picker-grid">
+          <label class="clickable-picker">Date
+            <input required id="bookingDate" type="date" min="${new Date().toISOString().split("T")[0]}" />
+          </label>
+          <label class="clickable-picker">Time
+            <input required id="bookingTime" type="time" />
+          </label>
         </div>
+        <label>Job details
+          <textarea id="bookingMessage" rows="4" placeholder="Explain your requirement..."></textarea>
+        </label>
+        <button type="submit">Send order request</button>
       </form>
     `;
 
-    $("backToSearch").onclick = () => {
-      viewMode = "marketplace";
-      drawMarketplace();
-    };
+    ensureDateTimePickerExperience($("bookingDate"), $("bookingTime"));
+
+    $("backToSeller").onclick = () => { viewMode = "profile"; renderView(); };
 
     $("orderForm").onsubmit = (event) => {
       event.preventDefault();
+      const tier = service.tiers[Number($("tierSelect").value)];
+      const offerPrice = Number($("offerPrice").value);
       const date = $("bookingDate").value;
       const time = $("bookingTime").value;
-      const message = $("bookingMessage").value.trim();
+      const dayName = getDayName(date);
 
-      if (!date || !time) {
-        alert("Please choose both date and time.");
+      if ((provider.unavailableDays || []).includes(dayName)) {
+        alert(`${provider.name} is unavailable on ${dayName}. Please pick another day.`);
         return;
       }
 
@@ -171,170 +259,35 @@ function renderCustomer(db, user) {
         id: uid("book"),
         customerId: user.id,
         providerId: provider.id,
+        serviceId: service.id,
+        tierName: tier.name,
+        minPrice: Number(tier.minPrice),
+        maxPrice: Number(tier.maxPrice),
+        offerPrice,
         date,
         time,
-        message,
+        message: $("bookingMessage").value.trim(),
         status: "Pending",
+        chat: [{ from: user.id, text: "Hi, I just sent this order request.", at: new Date().toISOString() }],
       });
-      db.transactions.push({ id: uid("txn"), bookingId: db.bookings.at(-1).id, amount: 5000, status: "Held" });
+      db.transactions.push({ id: uid("txn"), bookingId: db.bookings.at(-1).id, amount: offerPrice, status: "Held" });
       saveDB(db);
+      alert("Order sent. Seller can accept, decline, or renegotiate.");
       viewMode = "marketplace";
-      drawMarketplace();
+      renderView();
     };
-  };
-
-  const drawMarketplace = () => {
-    const query = searchInput.value.trim().toLowerCase();
-    const selectedCategory = categorySelect.value;
-
-    const filteredProducts = productData.filter((product) => {
-      const matchesQuery = !query || product.name.toLowerCase().includes(query) || product.provider?.name.toLowerCase().includes(query);
-      const matchesCategory = !selectedCategory || product.category === selectedCategory;
-      const matchesPrice = product.price <= priceLimit;
-      const matchesRating = !ratingFilter || product.rating >= Number(ratingFilter);
-      const matchesAvailability = !availabilityFilter || (availabilityFilter === "available" && product.inStock);
-      const matchesLocation = !locationFilter || product.location.toLowerCase().includes(locationFilter.toLowerCase());
-      return matchesQuery && matchesCategory && matchesPrice && matchesRating && matchesAvailability && matchesLocation;
-    });
-
-    const recommendedProducts = filteredProducts.slice(0, 12);
-    const myBookings = db.bookings.filter((b) => b.customerId === user.id).slice(-4).reverse();
-    const pendingJobs = db.bookings
-      .filter((b) => b.customerId === user.id && ["Pending", "Accepted", "In Progress"].includes(b.status))
-      .slice(-4)
-      .reverse();
-
-    target.innerHTML = `
-      <section class="marketplace-layout">
-        <aside class="filters-panel card">
-          <h3>Filters</h3>
-          <div class="filter-item"><span>📦</span><label>Category<select id="sideCategory"><option value="">All</option>${displayCategories.map((c) => `<option ${c === selectedCategory ? "selected" : ""}>${c}</option>`).join("")}</select></label></div>
-          <div class="filter-item"><span>💲</span><label>Price Range<input id="priceRange" type="range" min="3000" max="20000" value="${priceLimit}" /></label></div>
-          <div class="filter-item"><span>⭐</span><label>Ratings<select id="ratingFilter"><option value="">All</option>${ratingOptions.map((r) => `<option value="${r}" ${String(r) === ratingFilter ? "selected" : ""}>${r}+ stars</option>`).join("")}</select></label></div>
-          <div class="filter-item"><span>✅</span><label>Availability<select id="availabilityFilter"><option value="">Any</option><option value="available" ${availabilityFilter === "available" ? "selected" : ""}>In stock</option></select></label></div>
-          <div class="filter-item"><span>📍</span><label>Location<input id="locationFilter" placeholder="e.g. Lagos" value="${locationFilter}" /></label></div>
-        </aside>
-
-        <main class="market-content">
-          <section class="promo-banner">
-            <h2>Clearance Sales</h2>
-            <p>Limited-time discounts from trusted sellers across HermesHub.</p>
-          </section>
-
-          <section>
-            <h3>Categories for You</h3>
-            <div class="category-row">
-              ${displayCategories.map((category) => `<article class="category-card">${category}</article>`).join("")}
-            </div>
-          </section>
-
-          <section>
-            <h3>Recommended for You</h3>
-            <div class="products-grid">
-              ${recommendedProducts
-                .map((product) => `
-                  <article class="product-card" data-provider="${product.providerId}">
-                    <div class="image-wrap">
-                      <img src="${product.image}" alt="${product.name}" />
-                      <button class="quick-view" data-quick="${product.providerId}">Quick View</button>
-                    </div>
-                    <h4>${product.name}</h4>
-                    <p class="muted">${product.provider?.name || "Marketplace Store"}</p>
-                    <p class="price">₦${product.price.toLocaleString()}</p>
-                    <p><span class="stars">${stars(product.rating)}</span> (${product.reviewCount})</p>
-                    <button data-quick="${product.providerId}">Book now</button>
-                  </article>`)
-                .join("") || '<p class="item">No products found for selected filters.</p>'}
-            </div>
-          </section>
-
-          <section>
-            <h3>My Recent Bookings</h3>
-            <div class="list">
-              ${myBookings.length
-                ? myBookings
-                    .map((booking) => {
-                      const provider = db.users.find((u) => u.id === booking.providerId);
-                      return `<article class="item"><strong>${provider?.name || "Store"}</strong><p>${booking.date} ${booking.time} · ${booking.status}</p></article>`;
-                    })
-                    .join("")
-                : '<p class="item">No bookings yet.</p>'}
-            </div>
-          </section>
-        </main>
-
-        <aside class="right-sidebar card">
-          <h3>Trending Stores</h3>
-          <ul>
-            ${providers.slice(0, 3).map((p) => `<li>${p.business || p.name}</li>`).join("") || "<li>Local Essentials</li>"}
-          </ul>
-          <h3>Recently Viewed</h3>
-          <ul>
-            ${recommendedProducts.slice(0, 3).map((p) => `<li>${p.name}</li>`).join("") || "<li>No recent items</li>"}
-          </ul>
-          <h3>Flash Deals</h3>
-          <p class="badge">Up to 30% off selected services</p>
-          <h3>Pending Jobs</h3>
-          <div class="list">
-            ${pendingJobs.length
-              ? pendingJobs
-                  .map((booking) => {
-                    const provider = db.users.find((u) => u.id === booking.providerId);
-                    return `<article class="item"><strong>${provider?.name || "Service Provider"}</strong><p>${booking.date} ${booking.time} · ${booking.status}</p></article>`;
-                  })
-                  .join("")
-              : '<p class="item">No pending jobs right now.</p>'}
-          </div>
-        </aside>
-      </section>
-    `;
-
-    $("sideCategory").onchange = (event) => {
-      categorySelect.value = event.target.value;
-      drawMarketplace();
-    };
-
-    $("priceRange").oninput = (event) => {
-      priceLimit = Number(event.target.value);
-      drawMarketplace();
-    };
-    $("ratingFilter").onchange = (event) => {
-      ratingFilter = event.target.value;
-      drawMarketplace();
-    };
-    $("availabilityFilter").onchange = (event) => {
-      availabilityFilter = event.target.value;
-      drawMarketplace();
-    };
-    $("locationFilter").oninput = (event) => {
-      locationFilter = event.target.value;
-      drawMarketplace();
-    };
-
-    target.querySelectorAll("[data-quick]").forEach((btn) => {
-      btn.onclick = () => {
-        selectedProviderId = btn.getAttribute("data-quick");
-        viewMode = "order";
-        drawBookingPage();
-      };
-    });
   };
 
   const renderView = () => {
     if (viewMode === "marketplace") drawMarketplace();
+    if (viewMode === "profile") drawSellerProfile();
     if (viewMode === "order") drawBookingPage();
   };
 
   $("profileBtn").onclick = () => alert(`Logged in as ${user.name}`);
   $("notifyBtn").onclick = () => alert("You are all caught up.");
-
-  searchInput.oninput = () => {
-    if (viewMode === "marketplace") drawMarketplace();
-  };
-
-  categorySelect.onchange = () => {
-    if (viewMode === "marketplace") drawMarketplace();
-  };
+  searchInput.oninput = () => viewMode === "marketplace" && renderView();
+  categorySelect.onchange = () => viewMode === "marketplace" && renderView();
 
   renderView();
 }
@@ -342,50 +295,109 @@ function renderCustomer(db, user) {
 function renderProvider(db, user) {
   const target = $("providerView");
   target.classList.remove("hidden");
-  const incoming = db.bookings.filter((b) => b.providerId === user.id);
+  const incoming = db.bookings.filter((b) => b.providerId === user.id).slice().reverse();
   const rating = providerRating(db, user.id);
 
   target.innerHTML = `
-    <h2>Service Provider Portal</h2>
-    <div class="item">
+    <h2>Seller Dashboard</h2>
+    <div class="item stack">
       <p><b>KYC:</b> ${user.kycStatus || "pending"}</p>
       <p><b>Business:</b> ${user.business || "n/a"}</p>
       <p><b>Earnings:</b> ₦${(user.earnings || 0).toLocaleString()}</p>
       <p><b>Rating:</b> <span class="stars">${stars(rating)}</span></p>
-      <label>Availability slots (comma separated)
-        <input id="availabilityInput" value="${(user.availability || []).join(", ")}" />
+      <label>Unavailable days (comma separated)
+        <input id="unavailableInput" value="${(user.unavailableDays || []).join(", ")}" placeholder="Sunday, Tuesday" />
       </label>
-      <button id="saveAvailability">Save availability</button>
+      <button id="saveUnavailable">Save unavailable days</button>
     </div>
-    <h3>Bookings</h3>
-    <div class="list" id="incomingBookings">
-      ${incoming
-        .map(
-          (b) => `<article class="item">
-            <p><b>${b.date} ${b.time}</b> — ${b.status}</p>
-            <div class="badges"><span class="badge">Customer ${b.customerId}</span></div>
-            ${b.message ? `<p><b>Customer message:</b> ${b.message}</p>` : ""}
-            <div class="stack">
-              <button data-status="Accepted" data-booking="${b.id}">Accept</button>
-              <button data-status="In Progress" data-booking="${b.id}">Start job</button>
-              <button data-status="Completed" data-booking="${b.id}">Mark complete</button>
-              <button class="warn" data-status="Rejected" data-booking="${b.id}">Reject</button>
-            </div>
-          </article>`
-        )
-        .join("") || '<p class="item">No bookings assigned yet.</p>'}
-    </div>
-    <h3>Recent reviews</h3>
+
+    <h3>Upload item/service for sale</h3>
+    <form id="serviceForm" class="stack item">
+      <label>Item / Service name<input id="itemName" required placeholder="Any carpentry works" /></label>
+      <label>Description<textarea id="itemDescription" rows="3" placeholder="What do you offer?"></textarea></label>
+      <label>Price tier name<input id="tierName" required placeholder="Standard tier" /></label>
+      <label>Tier min price<input id="tierMin" type="number" required min="1" /></label>
+      <label>Tier max price<input id="tierMax" type="number" required min="1" /></label>
+      <label>Tier description<input id="tierDescription" placeholder="What this tier covers" /></label>
+      <label>Optimal preferred pay (for negotiation)<input id="optimalPrice" type="number" min="1" placeholder="350000" /></label>
+      <button type="submit">Save listing</button>
+    </form>
+
+    <h3>My listings</h3>
     <div class="list">
-      ${db.reviews
-        .filter((r) => r.providerId === user.id)
-        .map((r) => `<article class="item"><span class="stars">${stars(r.rating)}</span> ${r.comment || ""}</article>`)
-        .join("") || '<p class="item">No reviews yet.</p>'}
+      ${db.catalog.filter((s) => s.providerId === user.id).map((service) => `
+        <article class="item">
+          <b>${service.itemName}</b>
+          <p>${service.itemDescription || "No description"}</p>
+          <p class="muted">Optimal: ₦${Number(service.optimalPrice || 0).toLocaleString()}</p>
+          ${service.tiers.map((tier) => `<p>${tier.name}: ₦${Number(tier.minPrice).toLocaleString()} - ₦${Number(tier.maxPrice).toLocaleString()}</p>`).join("")}
+        </article>`).join("") || '<p class="item">No listings yet.</p>'}
+    </div>
+
+    <h3>Orders & negotiation</h3>
+    <div class="list" id="incomingBookings">
+      ${incoming.map((b) => {
+        const customer = db.users.find((u) => u.id === b.customerId);
+        return `<article class="item">
+          <p><b>${b.date} ${b.time}</b> — ${b.status}</p>
+          <p><b>Buyer:</b> ${customer?.name || b.customerId}</p>
+          <p><b>Tier:</b> ${b.tierName || "N/A"}</p>
+          <p><b>Buyer offer:</b> ₦${Number(b.offerPrice || 0).toLocaleString()} (range ₦${Number(b.minPrice || 0).toLocaleString()} - ₦${Number(b.maxPrice || 0).toLocaleString()})</p>
+          ${b.message ? `<p><b>Job:</b> ${b.message}</p>` : ""}
+          <div class="stack">
+            <button data-status="Accepted" data-booking="${b.id}">Accept</button>
+            <button data-status="In Progress" data-booking="${b.id}">Start job</button>
+            <button data-status="Completed" data-booking="${b.id}">Mark complete</button>
+            <button class="warn" data-status="Rejected" data-booking="${b.id}">Decline</button>
+            <label>Counter offer (optional)
+              <input data-counter="${b.id}" type="number" min="1" placeholder="Enter counter amount" />
+            </label>
+            <button class="ghost" data-status="Countered" data-booking="${b.id}">Send counter offer</button>
+            <label>Chat with buyer
+              <input data-chat="${b.id}" placeholder="Type a message" />
+            </label>
+            <button class="ghost" data-send-chat="${b.id}">Send chat</button>
+          </div>
+          <details>
+            <summary>Conversation (${(b.chat || []).length})</summary>
+            ${(b.chat || []).map((m) => `<p><b>${m.from === user.id ? "You" : (customer?.name || "Buyer")}:</b> ${m.text}</p>`).join("") || "<p>No messages yet.</p>"}
+          </details>
+        </article>`;
+      }).join("") || '<p class="item">No bookings assigned yet.</p>'}
     </div>
   `;
 
-  $("saveAvailability").onclick = () => {
-    user.availability = $("availabilityInput").value.split(",").map((v) => v.trim()).filter(Boolean);
+  $("saveUnavailable").onclick = () => {
+    user.unavailableDays = $("unavailableInput").value.split(",").map((v) => v.trim()).filter(Boolean);
+    saveDB(db);
+    render();
+  };
+
+  $("serviceForm").onsubmit = (event) => {
+    event.preventDefault();
+    const itemName = $("itemName").value.trim();
+    const itemDescription = $("itemDescription").value.trim();
+    const tierName = $("tierName").value.trim();
+    const tierMin = Number($("tierMin").value);
+    const tierMax = Number($("tierMax").value);
+    const tierDescription = $("tierDescription").value.trim();
+    const optimalPrice = Number($("optimalPrice").value || 0);
+
+    if (tierMin > tierMax) {
+      alert("Tier minimum price cannot be greater than maximum price.");
+      return;
+    }
+
+    db.catalog.push({
+      id: uid("svc"),
+      providerId: user.id,
+      itemName,
+      itemDescription,
+      tiers: [{ name: tierName, minPrice: tierMin, maxPrice: tierMax, description: tierDescription }],
+      acceptsNegotiation: true,
+      optimalPrice,
+    });
+
     saveDB(db);
     render();
   };
@@ -394,15 +406,48 @@ function renderProvider(db, user) {
     btn.onclick = () => {
       const booking = db.bookings.find((b) => b.id === btn.getAttribute("data-booking"));
       if (!booking) return;
-      booking.status = btn.getAttribute("data-status");
+      const nextStatus = btn.getAttribute("data-status");
+
+      if (nextStatus === "Countered") {
+        const counterInput = target.querySelector(`[data-counter="${booking.id}"]`);
+        const counterAmount = Number(counterInput?.value || 0);
+        if (!counterAmount) {
+          alert("Enter a counter amount first.");
+          return;
+        }
+        booking.offerPrice = counterAmount;
+        booking.status = "Countered";
+        booking.chat = booking.chat || [];
+        booking.chat.push({ from: user.id, text: `Counter offer: ₦${counterAmount.toLocaleString()}`, at: new Date().toISOString() });
+      } else {
+        booking.status = nextStatus;
+      }
+
       if (booking.status === "Completed") {
         user.completedJobs = (user.completedJobs || 0) + 1;
         user.acceptedJobs = Math.max(user.acceptedJobs || 0, user.completedJobs);
-        user.earnings = (user.earnings || 0) + 5000;
+        user.earnings = (user.earnings || 0) + Number(booking.offerPrice || 0);
         const txn = db.transactions.find((t) => t.bookingId === booking.id);
-        if (txn) txn.status = "Released";
+        if (txn) {
+          txn.status = "Released";
+          txn.amount = Number(booking.offerPrice || txn.amount);
+        }
       }
       if (booking.status === "Accepted") user.acceptedJobs = (user.acceptedJobs || 0) + 1;
+      saveDB(db);
+      render();
+    };
+  });
+
+  target.querySelectorAll("[data-send-chat]").forEach((btn) => {
+    btn.onclick = () => {
+      const bookingId = btn.getAttribute("data-send-chat");
+      const booking = db.bookings.find((b) => b.id === bookingId);
+      const input = target.querySelector(`[data-chat="${bookingId}"]`);
+      const text = input?.value.trim();
+      if (!booking || !text) return;
+      booking.chat = booking.chat || [];
+      booking.chat.push({ from: user.id, text, at: new Date().toISOString() });
       saveDB(db);
       render();
     };
@@ -434,8 +479,6 @@ function renderAdmin(db) {
         .map((t) => `<article class="item">${t.id} · Booking ${t.bookingId} · ₦${t.amount} · ${t.status}</article>`)
         .join("") || '<p class="item">No transactions yet.</p>'}
     </div>
-    <h3>Fraud & Account Actions</h3>
-    <p class="item">Suspend accounts by setting KYC to rejected or by deleting user records in storage (demo).</p>
   `;
 
   target.querySelectorAll("[data-user]").forEach((btn) => {
@@ -561,7 +604,7 @@ signupForm.addEventListener("submit", (event) => {
       business: data.get("business"),
       kycId: data.get("kycId"),
       kycStatus: "pending",
-      availability: [],
+      unavailableDays: [],
       earnings: 0,
       completedJobs: 0,
       acceptedJobs: 0,
