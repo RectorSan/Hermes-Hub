@@ -59,6 +59,7 @@ function loadDB() {
   const db = JSON.parse(localStorage.getItem(DB_KEY) || "null") || structuredClone(seed);
   if (!db.catalog) db.catalog = [];
   if (!db.bookings) db.bookings = [];
+  if (!db.users) db.users = [];
 
   // Backward compatibility for users that already have localStorage data
   // from older versions (fixed-price catalog and no provider bio/unavailable days).
