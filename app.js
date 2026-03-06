@@ -62,6 +62,27 @@ function loadDB() {
   if (!db.bookings) db.bookings = [];
   if (!db.reviews) db.reviews = [];
   if (!db.transactions) db.transactions = [];
+
+  db.catalog = db.catalog.map((service) => {
+    if (Array.isArray(service.tiers) && service.tiers.length) return service;
+
+    const fallbackMin = Number(service.minPrice ?? service.price ?? 0);
+    const fallbackMax = Number(service.maxPrice ?? service.price ?? fallbackMin);
+    return {
+      ...service,
+      itemName: service.itemName || service.name || "Service listing",
+      itemDescription: service.itemDescription || service.description || "",
+      tiers: [
+        {
+          name: service.tierName || "Standard",
+          minPrice: Number.isFinite(fallbackMin) ? fallbackMin : 0,
+          maxPrice: Number.isFinite(fallbackMax) ? fallbackMax : 0,
+          description: service.tierDescription || "",
+        },
+      ],
+    };
+  });
+
   return db;
 }
 function saveDB(db) { localStorage.setItem(DB_KEY, JSON.stringify(db)); }
@@ -134,7 +155,8 @@ function renderCustomer(db, user) {
       <div class="products-grid">
         ${serviceCards.map(({ service, provider }) => {
           const reviewCount = db.reviews.filter((r) => r.providerId === provider.id).length;
-          const minTier = service.tiers.reduce((min, tier) => Math.min(min, Number(tier.minPrice) || Infinity), Infinity);
+          const tiers = Array.isArray(service.tiers) ? service.tiers : [];
+          const minTier = tiers.reduce((min, tier) => Math.min(min, Number(tier.minPrice) || Infinity), Infinity);
           return `
             <article class="product-card">
               <h4>${service.itemName}</h4>
@@ -192,7 +214,7 @@ function renderCustomer(db, user) {
       <h3>${service.itemName}</h3>
       <p>${service.itemDescription || "No description."}</p>
       <div class="list">
-        ${service.tiers.map((tier) => `<article class="item"><b>${tier.name}</b><p>${tier.description || "No details"}</p><p>₦${Number(tier.minPrice).toLocaleString()} - ₦${Number(tier.maxPrice).toLocaleString()}</p></article>`).join("")}
+        ${(service.tiers || []).map((tier) => `<article class="item"><b>${tier.name}</b><p>${tier.description || "No details"}</p><p>₦${Number(tier.minPrice).toLocaleString()} - ₦${Number(tier.maxPrice).toLocaleString()}</p></article>`).join("")}
       </div>
       <button id="bookSeller">Place order / negotiate</button>
 
@@ -221,7 +243,7 @@ function renderCustomer(db, user) {
       <p class="muted">Select date/time and propose a price in seller range.</p>
       <form id="orderForm" class="stack">
         <label>Service package
-          <select id="tierSelect">${service.tiers.map((tier, index) => `<option value="${index}">${tier.name} (₦${Number(tier.minPrice).toLocaleString()} - ₦${Number(tier.maxPrice).toLocaleString()})</option>`).join("")}</select>
+          <select id="tierSelect">${(service.tiers || []).map((tier, index) => `<option value="${index}">${tier.name} (₦${Number(tier.minPrice).toLocaleString()} - ₦${Number(tier.maxPrice).toLocaleString()})</option>`).join("")}</select>
         </label>
         <label>Suggested budget (₦)
           <input id="offerPrice" type="number" min="1" required placeholder="e.g. 350000" />
@@ -247,7 +269,11 @@ function renderCustomer(db, user) {
 
     $("orderForm").onsubmit = (event) => {
       event.preventDefault();
-      const tier = service.tiers[Number($("tierSelect").value)];
+      const tier = (service.tiers || [])[Number($("tierSelect").value)];
+      if (!tier) {
+        alert("This listing has no valid pricing tiers yet. Please contact the seller.");
+        return;
+      }
       const offerPrice = Number($("offerPrice").value);
       const date = $("bookingDate").value;
       const time = $("bookingTime").value;
