@@ -110,6 +110,12 @@ function getDayName(dateText) {
   return ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][date.getDay()];
 }
 
+function getCustomerUnreadChatCount(db, customerId) {
+  return db.bookings
+    .filter((booking) => booking.customerId === customerId)
+    .reduce((sum, booking) => sum + Number(booking.customerUnreadCount || 0), 0);
+}
+
 function ensureDateTimePickerExperience(dateInput, timeInput) {
   [dateInput, timeInput].forEach((input) => {
     if (!input) return;
@@ -338,7 +344,22 @@ function renderCustomer(db, user) {
   };
 
   $("profileBtn").onclick = () => alert(`Logged in as ${user.name}`);
-  $("notifyBtn").onclick = () => alert("You are all caught up.");
+  $("notifyBtn").onclick = () => {
+    const unreadCount = getCustomerUnreadChatCount(db, user.id);
+    if (!unreadCount) {
+      alert("You are all caught up.");
+      return;
+    }
+
+    db.bookings
+      .filter((booking) => booking.customerId === user.id)
+      .forEach((booking) => {
+        booking.customerUnreadCount = 0;
+      });
+    saveDB(db);
+    alert(`You have ${unreadCount} new seller message${unreadCount > 1 ? "s" : ""}.`);
+    render();
+  };
   searchInput.oninput = () => viewMode === "marketplace" && renderView();
   categorySelect.onchange = () => viewMode === "marketplace" && renderView();
 
@@ -511,6 +532,7 @@ function renderProvider(db, user) {
       if (!booking || !text) return;
       booking.chat = booking.chat || [];
       booking.chat.push({ from: user.id, text, at: new Date().toISOString() });
+      booking.customerUnreadCount = Number(booking.customerUnreadCount || 0) + 1;
       saveDB(db);
       render();
     };
@@ -594,6 +616,9 @@ function render() {
   marketControls.classList.toggle("hidden", !isCustomer);
   profileBtn.classList.toggle("hidden", !isCustomer);
   notifyBtn.classList.toggle("hidden", !isCustomer);
+  const unreadCount = isCustomer ? getCustomerUnreadChatCount(db, user.id) : 0;
+  notifyBtn.classList.toggle("has-alert", unreadCount > 0);
+  notifyBtn.setAttribute("aria-label", unreadCount > 0 ? `Notifications (${unreadCount} unread)` : "Notifications");
 
   if (user.role === "customer") renderCustomer(db, user);
   if (user.role === "provider") renderProvider(db, user);
