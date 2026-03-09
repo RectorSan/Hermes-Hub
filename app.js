@@ -102,7 +102,7 @@ function stars(value) {
 }
 
 function activeJobsCount(db, providerId) {
-  return db.bookings.filter((b) => b.providerId === providerId && ["Pending", "Accepted", "In Progress", "Countered"].includes(b.status)).length;
+  return db.bookings.filter((b) => b.providerId === providerId && ["Pending", "Accepted", "Job Started", "Job Finished", "Countered", "Awaiting Delivery Confirmation"].includes(b.status)).length;
 }
 
 function getDayName(dateText) {
@@ -173,10 +173,34 @@ function renderCustomer(db, user) {
       <div class="list">
         ${db.bookings.filter((b) => b.customerId === user.id).slice(-5).reverse().map((booking) => {
           const provider = db.users.find((u) => u.id === booking.providerId);
-          return `<article class="item"><b>${provider?.name || "Seller"}</b><p>${booking.date} ${booking.time} · ${booking.status} · ₦${(booking.offerPrice || 0).toLocaleString()}</p></article>`;
+          const canConfirm = ["Job Finished", "Awaiting Delivery Confirmation"].includes(booking.status) && !booking.customerDelivered;
+          return `<article class="item"><b>${provider?.name || "Seller"}</b><p>${booking.date} ${booking.time} · ${booking.status} · ₦${(booking.offerPrice || 0).toLocaleString()}</p>${canConfirm ? `<button data-customer-delivered="${booking.id}">Confirm delivered (client)</button>` : ""}</article>`;
         }).join("") || '<p class="item">No orders yet.</p>'}
       </div>
     `;
+
+    target.querySelectorAll("[data-customer-delivered]").forEach((btn) => {
+      btn.onclick = () => {
+        const booking = db.bookings.find((b) => b.id === btn.getAttribute("data-customer-delivered"));
+        if (!booking) return;
+        booking.customerDelivered = true;
+        booking.status = booking.sellerDelivered ? "Delivered" : "Awaiting Delivery Confirmation";
+
+        if (booking.status === "Delivered" && !booking.payoutReleased) {
+          const provider = db.users.find((u) => u.id === booking.providerId);
+          if (provider) provider.earnings = (provider.earnings || 0) + Number(booking.offerPrice || 0);
+          const txn = db.transactions.find((t) => t.bookingId === booking.id);
+          if (txn) {
+            txn.status = "Released";
+            txn.amount = Number(booking.offerPrice || txn.amount);
+          }
+          booking.payoutReleased = true;
+        }
+
+        saveDB(db);
+        renderView();
+      };
+    });
 
     target.querySelectorAll("[data-provider]").forEach((btn) => {
       btn.onclick = () => {
@@ -374,14 +398,15 @@ function renderProvider(db, user) {
           <p><b>Buyer offer:</b> ₦${Number(b.offerPrice || 0).toLocaleString()} (range ₦${Number(b.minPrice || 0).toLocaleString()} - ₦${Number(b.maxPrice || 0).toLocaleString()})</p>
           ${b.message ? `<p><b>Job:</b> ${b.message}</p>` : ""}
           <div class="stack">
-            <button data-status="Accepted" data-booking="${b.id}">Accept</button>
-            <button data-status="In Progress" data-booking="${b.id}">Start job</button>
-            <button data-status="Completed" data-booking="${b.id}">Mark complete</button>
-            <button class="warn" data-status="Rejected" data-booking="${b.id}">Decline</button>
+            ${["Pending", "Countered"].includes(b.status) ? `<button data-status="Accepted" data-booking="${b.id}">Accept</button>
+            <button class="warn" data-status="Rejected" data-booking="${b.id}">Reject</button>` : ""}
+            ${b.status === "Accepted" ? `<button data-status="Job Started" data-booking="${b.id}">Job started</button>` : ""}
+            ${b.status === "Job Started" ? `<button data-status="Job Finished" data-booking="${b.id}">Job finished</button>` : ""}
+            ${["Job Finished", "Awaiting Delivery Confirmation"].includes(b.status) && !b.sellerDelivered ? `<button data-status="SellerDelivered" data-booking="${b.id}">Mark delivered (seller)</button>` : ""}
             <label>Counter offer (optional)
               <input data-counter="${b.id}" type="number" min="1" placeholder="Enter counter amount" />
             </label>
-            <button class="ghost" data-status="Countered" data-booking="${b.id}">Send counter offer</button>
+            ${["Pending", "Countered"].includes(b.status) ? `<button class="ghost" data-status="Countered" data-booking="${b.id}">Send counter offer</button>` : ""}
             <label>Chat with buyer
               <input data-chat="${b.id}" placeholder="Type a message" />
             </label>
@@ -448,20 +473,29 @@ function renderProvider(db, user) {
         booking.status = "Countered";
         booking.chat = booking.chat || [];
         booking.chat.push({ from: user.id, text: `Counter offer: ₦${counterAmount.toLocaleString()}`, at: new Date().toISOString() });
+      } else if (nextStatus === "SellerDelivered") {
+        booking.sellerDelivered = true;
+        booking.status = booking.customerDelivered ? "Delivered" : "Awaiting Delivery Confirmation";
       } else {
         booking.status = nextStatus;
       }
 
-      if (booking.status === "Completed") {
+      if (booking.status === "Job Finished" && !booking.completionRecorded) {
         user.completedJobs = (user.completedJobs || 0) + 1;
         user.acceptedJobs = Math.max(user.acceptedJobs || 0, user.completedJobs);
+        booking.completionRecorded = true;
+      }
+
+      if (booking.status === "Delivered" && !booking.payoutReleased) {
         user.earnings = (user.earnings || 0) + Number(booking.offerPrice || 0);
         const txn = db.transactions.find((t) => t.bookingId === booking.id);
         if (txn) {
           txn.status = "Released";
           txn.amount = Number(booking.offerPrice || txn.amount);
         }
+        booking.payoutReleased = true;
       }
+
       if (booking.status === "Accepted") user.acceptedJobs = (user.acceptedJobs || 0) + 1;
       saveDB(db);
       render();
