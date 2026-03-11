@@ -62,6 +62,7 @@ function loadDB() {
   if (!db.bookings) db.bookings = [];
   if (!db.reviews) db.reviews = [];
   if (!db.transactions) db.transactions = [];
+  if (!db.customerNotifications) db.customerNotifications = [];
 
   db.catalog = db.catalog.map((service) => {
     if (Array.isArray(service.tiers) && service.tiers.length) return service;
@@ -111,9 +112,17 @@ function getDayName(dateText) {
 }
 
 function getCustomerUnreadChatCount(db, customerId) {
-  return db.bookings
-    .filter((booking) => booking.customerId === customerId)
-    .reduce((sum, booking) => sum + Number(booking.customerUnreadCount || 0), 0);
+  return db.customerNotifications.filter((notification) => notification.customerId === customerId && !notification.read).length;
+}
+
+function addCustomerNotification(db, customerId, text) {
+  db.customerNotifications.push({
+    id: uid("notif"),
+    customerId,
+    text,
+    at: new Date().toISOString(),
+    read: false,
+  });
 }
 
 function ensureDateTimePickerExperience(dateInput, timeInput) {
@@ -180,7 +189,17 @@ function renderCustomer(db, user) {
         ${db.bookings.filter((b) => b.customerId === user.id).slice(-5).reverse().map((booking) => {
           const provider = db.users.find((u) => u.id === booking.providerId);
           const canConfirm = ["Job Finished", "Awaiting Delivery Confirmation"].includes(booking.status) && !booking.customerDelivered;
-          return `<article class="item"><b>${provider?.name || "Seller"}</b><p>${booking.date} ${booking.time} · ${booking.status} · ₦${(booking.offerPrice || 0).toLocaleString()}</p>${canConfirm ? `<button data-customer-delivered="${booking.id}">Confirm delivered (client)</button>` : ""}</article>`;
+          const canRespondToCounter = booking.status === "Countered";
+          const currentOffer = Math.min(Math.max(Number(booking.offerPrice || 0), Number(booking.minPrice || 0)), Number(booking.maxPrice || 0));
+          return `<article class="item"><b>${provider?.name || "Seller"}</b><p>${booking.date} ${booking.time} · ${booking.status} · ₦${(booking.offerPrice || 0).toLocaleString()}</p>${canConfirm ? `<button data-customer-delivered="${booking.id}">Confirm delivered (client)</button>` : ""}
+          ${canRespondToCounter
+            ? `<div class="stack"><p><b>Counter received:</b> Use slider to accept or revise.</p><label>Revised offer (₦${Number(booking.minPrice || 0).toLocaleString()} - ₦${Number(booking.maxPrice || 0).toLocaleString()})
+            <input data-buyer-slider="${booking.id}" type="range" min="${Number(booking.minPrice || 0)}" max="${Number(booking.maxPrice || 0)}" value="${currentOffer}" step="1000" />
+            <small>Selected: ₦<span data-buyer-slider-value="${booking.id}">${currentOffer.toLocaleString()}</span></small></label>
+            <button data-buyer-response="accept" data-booking-response="${booking.id}">Accept counter offer</button>
+            <button class="ghost" data-buyer-response="revise" data-booking-response="${booking.id}">Send revised offer</button>
+            <button class="warn" data-buyer-response="reject" data-booking-response="${booking.id}">Reject counter offer</button></div>`
+            : ""}</article>`;
         }).join("") || '<p class="item">No orders yet.</p>'}
       </div>
     `;
@@ -201,6 +220,45 @@ function renderCustomer(db, user) {
             txn.amount = Number(booking.offerPrice || txn.amount);
           }
           booking.payoutReleased = true;
+        }
+
+        saveDB(db);
+        renderView();
+      };
+    });
+
+    target.querySelectorAll("[data-buyer-slider]").forEach((slider) => {
+      slider.oninput = () => {
+        const bookingId = slider.getAttribute("data-buyer-slider");
+        const valueNode = target.querySelector(`[data-buyer-slider-value="${bookingId}"]`);
+        if (!valueNode) return;
+        valueNode.textContent = Number(slider.value || 0).toLocaleString();
+      };
+    });
+
+    target.querySelectorAll("[data-booking-response]").forEach((btn) => {
+      btn.onclick = () => {
+        const booking = db.bookings.find((b) => b.id === btn.getAttribute("data-booking-response"));
+        if (!booking || booking.status !== "Countered") return;
+        const response = btn.getAttribute("data-buyer-response");
+        const provider = db.users.find((u) => u.id === booking.providerId);
+
+        booking.chat = booking.chat || [];
+        if (response === "accept") {
+          booking.status = "Accepted";
+          booking.chat.push({ from: user.id, text: `I accepted your counter offer at ₦${Number(booking.offerPrice || 0).toLocaleString()}.`, at: new Date().toISOString() });
+          if (provider) provider.acceptedJobs = (provider.acceptedJobs || 0) + 1;
+        }
+        if (response === "reject") {
+          booking.status = "Rejected";
+          booking.chat.push({ from: user.id, text: "I rejected the counter offer.", at: new Date().toISOString() });
+        }
+        if (response === "revise") {
+          const slider = target.querySelector(`[data-buyer-slider="${booking.id}"]`);
+          const revisedAmount = Number(slider?.value || 0);
+          booking.offerPrice = revisedAmount;
+          booking.status = "Pending";
+          booking.chat.push({ from: user.id, text: `Revised offer from buyer: ₦${revisedAmount.toLocaleString()}`, at: new Date().toISOString() });
         }
 
         saveDB(db);
@@ -275,8 +333,9 @@ function renderCustomer(db, user) {
         <label>Service package
           <select id="tierSelect">${(service.tiers || []).map((tier, index) => `<option value="${index}">${tier.name} (₦${Number(tier.minPrice).toLocaleString()} - ₦${Number(tier.maxPrice).toLocaleString()})</option>`).join("")}</select>
         </label>
-        <label>Suggested budget (₦)
-          <input id="offerPrice" type="number" min="1" required placeholder="e.g. 350000" />
+        <label>Suggested budget with slider (₦)
+          <input id="offerPrice" type="range" required step="1000" />
+          <small>Selected offer: ₦<span id="offerPriceValue"></span></small>
         </label>
         <div class="picker-grid">
           <label class="clickable-picker">Date
@@ -294,6 +353,26 @@ function renderCustomer(db, user) {
     `;
 
     ensureDateTimePickerExperience($("bookingDate"), $("bookingTime"));
+
+    const tierSelect = $("tierSelect");
+    const offerSlider = $("offerPrice");
+    const offerPriceValue = $("offerPriceValue");
+
+    const syncOfferSlider = () => {
+      const tier = (service.tiers || [])[Number(tierSelect.value)];
+      if (!tier) return;
+      offerSlider.min = Number(tier.minPrice || 0);
+      offerSlider.max = Number(tier.maxPrice || 0);
+      const nextValue = Math.min(Math.max(Number(offerSlider.value || tier.minPrice), Number(tier.minPrice)), Number(tier.maxPrice));
+      offerSlider.value = String(nextValue);
+      offerPriceValue.textContent = nextValue.toLocaleString();
+    };
+
+    tierSelect.onchange = syncOfferSlider;
+    offerSlider.oninput = () => {
+      offerPriceValue.textContent = Number(offerSlider.value || 0).toLocaleString();
+    };
+    syncOfferSlider();
 
     $("backToSeller").onclick = () => { viewMode = "profile"; renderView(); };
 
@@ -351,13 +430,20 @@ function renderCustomer(db, user) {
       return;
     }
 
-    db.bookings
-      .filter((booking) => booking.customerId === user.id)
-      .forEach((booking) => {
-        booking.customerUnreadCount = 0;
+    const latestUpdates = db.customerNotifications
+      .filter((notification) => notification.customerId === user.id)
+      .slice(-8)
+      .reverse()
+      .map((notification) => `• ${notification.text}`)
+      .join("\n");
+
+    db.customerNotifications
+      .filter((notification) => notification.customerId === user.id)
+      .forEach((notification) => {
+        notification.read = true;
       });
     saveDB(db);
-    alert(`You have ${unreadCount} new seller message${unreadCount > 1 ? "s" : ""}.`);
+    alert(`You have ${unreadCount} new update${unreadCount > 1 ? "s" : ""}.\n\n${latestUpdates}`);
     render();
   };
   searchInput.oninput = () => viewMode === "marketplace" && renderView();
@@ -419,7 +505,7 @@ function renderProvider(db, user) {
           <p><b>Buyer offer:</b> ₦${Number(b.offerPrice || 0).toLocaleString()} (range ₦${Number(b.minPrice || 0).toLocaleString()} - ₦${Number(b.maxPrice || 0).toLocaleString()})</p>
           ${b.message ? `<p><b>Job:</b> ${b.message}</p>` : ""}
           <div class="stack">
-            ${["Pending", "Countered"].includes(b.status) ? `<button data-status="Accepted" data-booking="${b.id}">Accept</button>
+            ${b.status === "Pending" ? `<button data-status="Accepted" data-booking="${b.id}">Accept</button>
             <button class="warn" data-status="Rejected" data-booking="${b.id}">Reject</button>` : ""}
             ${b.status === "Accepted" ? `<button data-status="Job Started" data-booking="${b.id}">Job started</button>` : ""}
             ${b.status === "Job Started" ? `<button data-status="Job Finished" data-booking="${b.id}">Job finished</button>` : ""}
@@ -431,6 +517,7 @@ function renderProvider(db, user) {
             </label>
             <button class="ghost" data-status="Countered" data-booking="${b.id}">Send counter offer</button>`
               : ""}
+            ${b.status === "Countered" ? `<p class="muted">Renegotiation in progress. Waiting for buyer response before you can accept/reject.</p>` : ""}
             <label>Chat with buyer
               <input data-chat="${b.id}" placeholder="Type a message" />
             </label>
@@ -508,6 +595,13 @@ function renderProvider(db, user) {
         booking.status = nextStatus;
       }
 
+      if (["Countered", "Accepted", "Rejected", "Job Started", "Job Finished", "Awaiting Delivery Confirmation", "Delivered"].includes(booking.status)) {
+        const updateText = booking.status === "Countered"
+          ? `Seller countered your order with ₦${Number(booking.offerPrice || 0).toLocaleString()}`
+          : `Order update: ${booking.status}`;
+        addCustomerNotification(db, booking.customerId, `${updateText} (${booking.date} ${booking.time})`);
+      }
+
       if (booking.status === "Job Finished" && !booking.completionRecorded) {
         user.completedJobs = (user.completedJobs || 0) + 1;
         user.acceptedJobs = Math.max(user.acceptedJobs || 0, user.completedJobs);
@@ -548,7 +642,7 @@ function renderProvider(db, user) {
       if (!booking || !text) return;
       booking.chat = booking.chat || [];
       booking.chat.push({ from: user.id, text, at: new Date().toISOString() });
-      booking.customerUnreadCount = Number(booking.customerUnreadCount || 0) + 1;
+      addCustomerNotification(db, booking.customerId, `New seller message from ${user.name}: "${text}"`);
       saveDB(db);
       render();
     };
