@@ -246,8 +246,30 @@ details {
   padding: 0.5rem;
 }
 
+.negotiation-chat-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.8rem;
+}
+
+.item-section {
+  background: #f8fbff;
+  border: 1px solid #dbe5f5;
+  border-radius: 10px;
+  padding: 0.7rem;
+}
+
+.subsection-title {
+  margin: 0;
+  color: var(--primary);
+}
+
 @media (max-width: 800px) {
   .picker-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .negotiation-chat-layout {
     grid-template-columns: 1fr;
   }
 }

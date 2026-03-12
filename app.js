@@ -346,7 +346,7 @@ function renderCustomer(db, user) {
           </label>
         </div>
         <label>Job details
-          <textarea id="bookingMessage" rows="4" placeholder="Explain your requirement..."></textarea>
+          <textarea id="bookingMessage" rows="4" required minlength="10" placeholder="Briefly explain your requirement (at least 10 characters)..."></textarea>
         </label>
         <button type="submit">Send order request</button>
       </form>
@@ -387,6 +387,12 @@ function renderCustomer(db, user) {
       const date = $("bookingDate").value;
       const time = $("bookingTime").value;
       const dayName = getDayName(date);
+      const message = $("bookingMessage").value.trim();
+
+      if (message.length < 10) {
+        alert("Please provide a brief order description (at least 10 characters).");
+        return;
+      }
 
       if ((provider.unavailableDays || []).includes(dayName)) {
         alert(`${provider.name} is unavailable on ${dayName}. Please pick another day.`);
@@ -404,7 +410,7 @@ function renderCustomer(db, user) {
         offerPrice,
         date,
         time,
-        message: $("bookingMessage").value.trim(),
+        message,
         status: "Pending",
         chat: [{ from: user.id, text: "Hi, I just sent this order request.", at: new Date().toISOString() }],
       });
@@ -499,12 +505,17 @@ function renderProvider(db, user) {
       ${incoming.map((b) => {
         const customer = db.users.find((u) => u.id === b.customerId);
         return `<article class="item">
-          <p><b>${b.date} ${b.time}</b> — ${b.status}</p>
           <p><b>Buyer:</b> ${customer?.name || b.customerId}</p>
-          <p><b>Tier:</b> ${b.tierName || "N/A"}</p>
-          <p><b>Buyer offer:</b> ₦${Number(b.offerPrice || 0).toLocaleString()} (range ₦${Number(b.minPrice || 0).toLocaleString()} - ₦${Number(b.maxPrice || 0).toLocaleString()})</p>
-          ${b.message ? `<p><b>Job:</b> ${b.message}</p>` : ""}
-          <div class="stack">
+          <div class="negotiation-chat-layout">
+            <div class="stack item-section">
+              <h4 class="subsection-title">Negotiation details</h4>
+              <p><b>Date:</b> ${b.date}</p>
+              <p><b>Time:</b> ${b.time}</p>
+              <p><b>Status:</b> ${b.status}</p>
+              <p><b>Tier:</b> ${b.tierName || "N/A"}</p>
+              <p><b>Buyer offer:</b> ₦${Number(b.offerPrice || 0).toLocaleString()} (range ₦${Number(b.minPrice || 0).toLocaleString()} - ₦${Number(b.maxPrice || 0).toLocaleString()})</p>
+              ${b.message ? `<p><b>Job:</b> ${b.message}</p>` : ""}
+              <div class="stack">
             ${b.status === "Pending" ? `<button data-status="Accepted" data-booking="${b.id}">Accept</button>
             <button class="warn" data-status="Rejected" data-booking="${b.id}">Reject</button>` : ""}
             ${b.status === "Accepted" ? `<button data-status="Job Started" data-booking="${b.id}">Job started</button>` : ""}
@@ -518,15 +529,20 @@ function renderProvider(db, user) {
             <button class="ghost" data-status="Countered" data-booking="${b.id}">Send counter offer</button>`
               : ""}
             ${b.status === "Countered" ? `<p class="muted">Renegotiation in progress. Waiting for buyer response before you can accept/reject.</p>` : ""}
-            <label>Chat with buyer
-              <input data-chat="${b.id}" placeholder="Type a message" />
-            </label>
-            <button class="ghost" data-send-chat="${b.id}">Send chat</button>
+              </div>
+            </div>
+            <div class="stack item-section">
+              <h4 class="subsection-title">Chat with buyer</h4>
+              <label>Message
+                <input data-chat="${b.id}" placeholder="Type a message" />
+              </label>
+              <button class="ghost" data-send-chat="${b.id}">Send chat</button>
+              <details>
+                <summary>Conversation (${(b.chat || []).length})</summary>
+                ${(b.chat || []).map((m) => `<p><b>${m.from === user.id ? "You" : (customer?.name || "Buyer")}:</b> ${m.text}</p>`).join("") || "<p>No messages yet.</p>"}
+              </details>
+            </div>
           </div>
-          <details>
-            <summary>Conversation (${(b.chat || []).length})</summary>
-            ${(b.chat || []).map((m) => `<p><b>${m.from === user.id ? "You" : (customer?.name || "Buyer")}:</b> ${m.text}</p>`).join("") || "<p>No messages yet.</p>"}
-          </details>
         </article>`;
       }).join("") || '<p class="item">No bookings assigned yet.</p>'}
     </div>
