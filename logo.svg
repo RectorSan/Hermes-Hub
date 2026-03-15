@@ -1,7 +1,7 @@
 <svg width="170" height="170" viewBox="0 0 170 170" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="HermesHub designed logo">
-  <rect width="170" height="170" rx="20" fill="#000000"/>
-  <rect x="45" y="44" width="20" height="80" rx="10" fill="#D9D9D9"/>
-  <rect x="105" y="44" width="20" height="80" rx="10" fill="#D9D9D9"/>
-  <path d="M103 67L79 85H96L76 103L110 82H93L103 67Z" fill="#FFFFFF"/>
-  <text x="85" y="136" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700" letter-spacing="1.5" fill="#FFFFFF">HERMESHUB</text>
+  <rect width="170" height="170" rx="20" fill="#FFFFFF"/>
+  <path d="M61 44H71V114A10 10 0 0 1 61 124H51V54A10 10 0 0 1 61 44Z" fill="#007DF7"/>
+  <path d="M125 44H135V114A10 10 0 0 1 125 124H115V54A10 10 0 0 1 125 44Z" fill="#007DF7"/>
+  <path d="M103 67L79 85H96L76 103L110 82H93L103 67Z" fill="#007DF7"/>
+  <text x="85" y="136" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-size="14" font-weight="700" letter-spacing="1.5" fill="#000000">HERMESHUB</text>
 </svg>
