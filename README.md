@@ -1,33 +1,33 @@
-# Hermes Hub Web App (MVP)
+# Hermes Hub
 
-A mobile-first single-page web app prototype for **Hermes Hub**, a trusted local services marketplace connecting customers with verified artisans.
+Ibadan marketplace prototype for custom, made-to-order physical goods.
 
-## Implemented MVP flows
-
-- Multi-role onboarding and login simulation (Customer / Provider / Admin)
-- Email/phone OTP simulation (`123456`)
-- Provider KYC submission + admin approve/reject workflow
-- Customer search by category, location keyword, and marketplace sort options
-- Provider profile cards with ratings, reviews, completion rate, and availability
-- Booking creation with future date/time validation + lifecycle statuses
-- Secure payment simulation with transaction states (`Held` -> `Released`)
-- Provider dashboard for availability, bookings, ratings, workload, and earnings
-- Customer review system (1-5 stars + comment)
-- Customer order summary cards for active, delivered, unread, and total orders
-- Admin console for KYC and transaction monitoring
+Live: https://hermeshub.rectorsan.com
 
 ## Run locally
 
-```bash
-python3 -m http.server 4173
-```
+Serve this directory with a static HTTP server, for example `python -m http.server 4173`, then open http://localhost:4173.
 
-Open `http://localhost:4173`.
+## Included flows
 
-## Demo users
+- Artisan discovery, neighbourhood/category filters, favourites and profiles.
+- Retail/bulk orders and custom briefs with manual artisan selection.
+- Explicit simulated quotes and buyer approval of price/specifications before production.
+- Local messaging, production/delivery progress and disputes that block progression.
+- Local demo profiles with sign-out/resume, customer summaries, maker availability and sample business review.
+- Open admin demo for sample business decisions and a transaction-state ledger.
+- Reviews only for accepted, delivered, undisputed orders, linked to the order artisan.
 
-- Admin: `admin@hermeshub.app`
-- Customer: `ada@example.com`
-- Provider: `kunle@fix.com`
+## Prototype boundaries
 
-Any new user can sign up from the form.
+This is a browser-local demonstration, not a production marketplace. Profiles share the same browser orders; role switching is intentionally open and is not authentication or authorization. No actual payments, identity checks, messages, emails, bookings or logistics requests are performed. Do not enter identity documents or other sensitive information. A backend, real authentication and authorized service integrations are required for launch.
+
+The earlier services-booking prototype is preserved in `legacy-booking-demo/` for reference; it has demo-only OTP and local storage and should not be treated as production authentication.
+
+## Source and hosting
+
+Root files are the integrated standalone app. `index.html` loads `style.css`, `app.js`, and `roles.js`. Original Figma logo assets and the blue palette are retained. Sites hosting is maintained separately; changing this repository alone does not automatically deploy the public site.
+
+## Checks
+
+Run `node --check app.js` and `node --check roles.js`. Browser QA covers custom quotes/approval, dispute blocking, local messages, profile creation and maker/admin review.
