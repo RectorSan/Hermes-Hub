@@ -31,3 +31,11 @@ Root files are the integrated standalone app. `index.html` loads `style.css`, `a
 ## Checks
 
 Run `node --check app.js` and `node --check roles.js`. Browser QA covers custom quotes/approval, dispute blocking, local messages, profile creation and maker/admin review.
+
+## Hybrid shopping and commissioning
+
+The app now has separate Shop goods and Commission a maker entrances, with three modes: buy a known design, personalize bounded options, or commission a new piece. Product carts are grouped by maker with quantity edits, pickup/delivery estimates and total review. Pre-order conversations carry into maker briefs. Demo proposals are manually priced, versioned, revisable/declinable, expire, and preserve an accepted agreement snapshot. Reordering prefills previous selections at current sample prices.
+
+`hybrid.js` extends the existing marketplace and loads after `roles.js`. Run `node --check hybrid.js` as well as the other syntax checks. Sample lead times and delivery charges are illustrative; there are no live inventory, scheduling, messaging or payment integrations. The standalone maker-role availability demo remains separate from sample marketplace artisans.
+
+Validation: browser checks cover personalized pricing, cart checkout and pickup totals, persistence, proposal revisions, and accepted agreement snapshots. This iteration was self-reviewed after the critic supplied its checklist; agent execution hit the account usage limit.
